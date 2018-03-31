@@ -1,0 +1,2 @@
+{"info":"This is the template JSON file, rename this {NAME}_info.json to have the file automatically found by the program; though this field is harmless, it's unnessesary and can be deleted.", 
+"key": "{KEY for Google's URL shortener API}"}
