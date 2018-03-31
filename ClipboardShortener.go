@@ -2,10 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -33,7 +35,7 @@ const (
 	KILL = "kill cs"
 )
 
-func getURL(resp *http.Response) (dataResponse, error) {
+func getDataStruct(resp *http.Response) (dataResponse, error) {
 	defer resp.Body.Close()
 	decoder := json.NewDecoder(resp.Body)
 	if resp.StatusCode == 200 {
@@ -56,34 +58,55 @@ func getURL(resp *http.Response) (dataResponse, error) {
 
 func main() {
 	var ok bool
-	var dat info
+	var delay int
 	var err error
-	var cb, last, nURL string
+	var cb, file, key, last, nURL string
 
 	cache := make(map[string]string)
+	client := http.Client{Timeout: time.Second * 10}
+
+	flag.IntVar(&delay, "delay", 1500, "The delay between each time the clipboard is polled")
+	flag.StringVar(&file, "file", "", "JSON file to read in API key data from")
+	flag.StringVar(&key, "key", "", "Key for the Google URL Shortener API")
+	flag.Parse()
+
 	longMatch := regexp.MustCompile(`^(https?:\/\/)?[\d\w^\.]+\.[\w^\/]+(\/[^\/]*)*$`)
 	shortMatch := regexp.MustCompile(`^(https?:\/\/)?goo\.gl\/([^\/]+\/?)+$`)
 
-	client := http.Client{Timeout: time.Second * 10}
-	fi, err := os.Open("info.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	b, err := ioutil.ReadAll(fi)
-	fi.Close()
+	if file == "" {
+		matches, err := filepath.Glob("*_info.json")
 
-	if err != nil {
-		log.Fatal(err)
+		if err != nil {
+			log.Fatal(err)
+		}
+		file = matches[0]
 	}
-	json.Unmarshal(b, &dat)
 
-	apiSite := fmt.Sprintf("https://www.googleapis.com/urlshortener/v1/url?key=%s", dat.Key)
+	if key == "" {
+		var dat info
+
+		fi, err := os.Open(file)
+		if err != nil {
+			log.Fatal(err)
+		}
+		b, err := ioutil.ReadAll(fi)
+		fi.Close()
+
+		if err != nil {
+			log.Fatal(err)
+		}
+		json.Unmarshal(b, &dat)
+
+		key = dat.Key
+	}
+
+	apiSite := fmt.Sprintf("https://www.googleapis.com/urlshortener/v1/url?key=%s", key)
 
 	getElongatedURL := func(URL string) (string, error) {
 		s := apiSite + "&shortUrl=" + URL
 		resp, err := client.Get(s)
 		if err == nil {
-			dataR, err := getURL(resp)
+			dataR, err := getDataStruct(resp)
 			if err != nil {
 				return "", err
 			}
@@ -97,7 +120,7 @@ func main() {
 		s := strings.NewReader(JSON)
 		resp, err := client.Post(apiSite, "application/json", s)
 		if err == nil {
-			dataR, err := getURL(resp)
+			dataR, err := getDataStruct(resp)
 			if err != nil {
 				return "", err
 			}
@@ -140,7 +163,7 @@ func main() {
 				last = cb
 			}
 		}
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Millisecond * time.Duration(delay))
 	}
 	fmt.Println("Ded")
 }
